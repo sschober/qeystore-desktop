@@ -18,6 +18,8 @@ public:
 
 public slots:
     void newEntry();
+    void tableViewClicked(const QModelIndex&);
+
 
 private:
     QSqlDatabase init_db();

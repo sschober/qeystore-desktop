@@ -4,6 +4,9 @@
 int main(int argc, char *argv[])
 {
     QApplication a(argc, argv);
+    a.setOrganizationName("sschober");
+    a.setOrganizationDomain("sssm.de");
+    a.setApplicationName("qeystore");
     MainWindow w;
     w.show();
     

@@ -6,8 +6,13 @@
 #include <QSqlQuery>
 #include <QSqlError>
 #include <QSqlQueryModel>
+#include <QSqlRecord>
+#include <QSqlField>
 #include <QInputDialog>
 #include <QLineEdit>
+#include <QClipboard>
+#include <QSettings>
+#include <QFileDialog>
 
 MainWindow::MainWindow(QWidget *parent) :
     QMainWindow(parent),
@@ -15,21 +20,32 @@ MainWindow::MainWindow(QWidget *parent) :
 {
     ui->setupUi(this);
     connect(ui->actionNewEntry, SIGNAL(triggered()), this, SLOT(newEntry()));
+    connect(ui->tableView,SIGNAL(clicked(QModelIndex)),this,SLOT(tableViewClicked(QModelIndex)));
+
     db = init_db();
 }
 
 QSqlDatabase MainWindow::init_db(){
-    // init home dir path
-    QString dotDir = QDir::toNativeSeparators(QDir::home().path()) + QDir::separator() + ".qeystore";
-    QString dotDbFile = dotDir + QDir::separator() + "qeystore.db";
-    if(!QDir::home().mkpath(".qeystore")){
-        qDebug() << "Could not create dot dir: " + dotDir;
+    QSettings settings;
+    QString dbPath =
+            settings.value(
+                "db/path",
+                //QDir::toNativeSeparators(QDir::home().path()) + QDir::separator() + ".qeystore"
+                "").value<QString>();
+    if(dbPath == ""){
+        dbPath = QFileDialog::getExistingDirectory(this,"Select directory for keystore database");
     }
+    QString dbFileName = settings.value("db/file", "qeystore.db").value<QString>();
+    QString dotDbFile = dbPath + QDir::separator() + dbFileName;
+
+    // open database file
     QSqlDatabase db = QSqlDatabase::addDatabase("QSQLITE");
     db.setDatabaseName(dotDbFile);
     if(!db.open()){
         qDebug() << "Could not open database: " << db.lastError().text();
     }
+
+    // ask user for password
     QString pwd = QInputDialog::getText(this,"Store password","Please enter the store password:",QLineEdit::Password);
 
     // Set password
@@ -38,6 +54,7 @@ QSqlDatabase MainWindow::init_db(){
         qDebug() << "Could not set password: " << query.lastError().text();
     }
 
+    // create schema if it doesn't exist
     if(!db.tables().contains("passwords")){
         qDebug() << "Creating  table `passwords`...";
         query = db.exec("CREATE TABLE passwords(url text, username text, password test);");
@@ -46,9 +63,16 @@ QSqlDatabase MainWindow::init_db(){
         }
     }
     qDebug() << "Database file " << dotDbFile << " created/opened";
+
+    // init table view
     QSqlQueryModel *m = new QSqlQueryModel;
     m->setQuery("SELECT * FROM passwords;");
     ui->tableView->setModel(m);
+
+    // save settings
+    settings.setValue("db/path",dbPath);
+    settings.setValue("db/file",dbFileName);
+
     return db;
 }
 
@@ -67,6 +91,16 @@ void MainWindow::newEntry(){
         }
         ((QSqlQueryModel*)ui->tableView->model())->setQuery("SELECT * FROM passwords;");
     }
+}
+
+void MainWindow::tableViewClicked(const QModelIndex &idx){
+    //ui->tableView->model()->data(index)
+    qDebug() << "Row " << idx.row() << " clicked";
+    QString pwd = ((QSqlQueryModel*)ui->tableView->model())->record(idx.row()).field("password").value().toString();
+    QClipboard *clipboard = QApplication::clipboard();
+    clipboard->setText(pwd);
+    clipboard->setText(pwd,QClipboard::Selection);
+    qDebug() << "Password copied to clipboard.";
 }
 
 MainWindow::~MainWindow()
