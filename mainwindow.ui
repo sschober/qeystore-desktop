@@ -33,6 +33,7 @@
     <property name="title">
      <string>File</string>
     </property>
+    <addaction name="actionChange_Password"/>
     <addaction name="actionClose"/>
    </widget>
    <widget class="QMenu" name="menuEditieren">
@@ -87,6 +88,11 @@
     <string>Ctrl+F, Ctrl+/</string>
    </property>
   </action>
+  <action name="actionChange_Password">
+   <property name="text">
+    <string>Change Password</string>
+   </property>
+  </action>
  </widget>
  <layoutdefault spacing="6" margin="11"/>
  <resources/>
@@ -98,8 +104,8 @@
    <slot>close()</slot>
    <hints>
     <hint type="sourcelabel">
-     <x>97</x>
-     <y>52</y>
+     <x>-1</x>
+     <y>-1</y>
     </hint>
     <hint type="destinationlabel">
      <x>199</x>

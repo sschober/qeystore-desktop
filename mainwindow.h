@@ -19,6 +19,7 @@ public:
 public slots:
     void newEntry();
     void tableViewClicked(const QModelIndex&);
+    void changePassword();
 
 
 private:

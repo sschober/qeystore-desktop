@@ -13,13 +13,17 @@
 #include <QClipboard>
 #include <QSettings>
 #include <QFileDialog>
+#include <QMessageBox>
 
 MainWindow::MainWindow(QWidget *parent) :
     QMainWindow(parent),
     ui(new Ui::MainWindow)
 {
     ui->setupUi(this);
+
     connect(ui->actionNewEntry, SIGNAL(triggered()), this, SLOT(newEntry()));
+    connect(ui->actionChange_Password, SIGNAL(triggered()),this, SLOT(changePassword()));
+
     connect(ui->tableView,SIGNAL(clicked(QModelIndex)),this,SLOT(tableViewClicked(QModelIndex)));
 
     db = init_db();
@@ -94,13 +98,28 @@ void MainWindow::newEntry(){
 }
 
 void MainWindow::tableViewClicked(const QModelIndex &idx){
-    //ui->tableView->model()->data(index)
     qDebug() << "Row " << idx.row() << " clicked";
     QString pwd = ((QSqlQueryModel*)ui->tableView->model())->record(idx.row()).field("password").value().toString();
     QClipboard *clipboard = QApplication::clipboard();
     clipboard->setText(pwd);
     clipboard->setText(pwd,QClipboard::Selection);
     qDebug() << "Password copied to clipboard.";
+}
+
+void MainWindow::changePassword() {
+    // ask user for password
+    QString pwd = QInputDialog::getText(this,"New Store password","Please enter the new store password:",QLineEdit::Password);
+    QString pwd2 = QInputDialog::getText(this,"New Store password (reentry)","Please enter the new store password again:",QLineEdit::Password);
+    if(pwd == pwd2){
+        // Set password
+        QSqlQuery query = db.exec(QString("PRAGMA REKEY='%1'").arg(pwd));
+        if(query.lastError().isValid()){
+            qDebug() << "Could not set password: " << query.lastError().text();
+        }
+    }
+    else{
+        QMessageBox::warning(this,"Passwords did not match!","Passwords did not match! Password unchanged");
+    }
 }
 
 MainWindow::~MainWindow()
