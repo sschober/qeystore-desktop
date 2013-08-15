@@ -14,6 +14,7 @@
 #include <QSettings>
 #include <QFileDialog>
 #include <QMessageBox>
+#include <QMouseEvent>
 
 MainWindow::MainWindow(QWidget *parent) :
     QMainWindow(parent),
@@ -49,22 +50,30 @@ QSqlDatabase MainWindow::init_db(){
         qDebug() << "Could not open database: " << db.lastError().text();
     }
 
-    // ask user for password
-    QString pwd = QInputDialog::getText(this,"Store password","Please enter the store password:",QLineEdit::Password);
+    // logic that asks for store password and tries to establish, if that was correct
+    while(42){
+        bool ok = false;
+        // ask user for password
+        QString pwd = QInputDialog::getText(this,"Store password","Please enter the store password:",QLineEdit::Password,"",&ok);
+        if(!ok) exit(-1);
 
-    // Set password
-    QSqlQuery query = db.exec(QString("PRAGMA KEY='%1'").arg(pwd));
-    if(query.lastError().isValid()){
-        qDebug() << "Could not set password: " << query.lastError().text();
-    }
-
-    // create schema if it doesn't exist
-    if(!db.tables().contains("passwords")){
-        qDebug() << "Creating  table `passwords`...";
-        query = db.exec("CREATE TABLE passwords(url text, username text, password test);");
+        // Set password
+        QSqlQuery query = db.exec(QString("PRAGMA KEY='%1'").arg(pwd));
         if(query.lastError().isValid()){
-            qDebug() << "Could not create table: " << query.lastError().text();
+            qDebug() << "Could not set password: " << query.lastError().text();
         }
+
+
+        // create schema if it doesn't exist
+        if(!db.tables().contains("passwords")){
+            qDebug() << "Creating  table `passwords`...";
+            query = db.exec("CREATE TABLE passwords(url text PRIMARY KEY NOT NULL, username text, password test);");
+            if(query.lastError().isValid()){
+                qDebug() << "Could not create table: " << query.lastError().text();
+                continue; // user seems to have supplied the wrong password
+            }
+        }
+        break;
     }
     qDebug() << "Database file " << dotDbFile << " created/opened";
 
@@ -73,6 +82,15 @@ QSqlDatabase MainWindow::init_db(){
     m->setQuery("SELECT * FROM passwords;");
     ui->tableView->setModel(m);
 
+    // Hide password column
+    ui->tableView->hideColumn(2);
+
+    // Adapt column width to column contents
+    ui->tableView->resizeColumnsToContents();
+
+    // Install CTRL-Click event filter
+    ui->tableView->viewport()->installEventFilter(this);
+
     // save settings
     settings.setValue("db/path",dbPath);
     settings.setValue("db/file",dbFileName);
@@ -80,30 +98,56 @@ QSqlDatabase MainWindow::init_db(){
     return db;
 }
 
+void MainWindow::refreshTableView(){
+    ((QSqlQueryModel*)ui->tableView->model())->setQuery("SELECT * FROM passwords;");
+
+    // Adapt column width to column contents
+    ui->tableView->resizeColumnsToContents();
+}
+
+void MainWindow::writeEntryToDb(QString url, QString username, QString password){
+    QSqlQuery q;
+    q.prepare("INSERT INTO passwords(url, username, password) VALUES(:url, :username, :password);");
+    q.bindValue(":url", url);
+    q.bindValue(":username",username);
+    q.bindValue(":password",password);
+    if(!q.exec()){
+        qDebug() << "Could not insert entry: " << q.lastError().text();
+    }
+    refreshTableView();
+}
+
 void MainWindow::newEntry(){
     Ui::NewEntry *ne = new Ui::NewEntry();
     QDialog d;
     ne->setupUi(&d);
     if(d.exec()){
-        QSqlQuery q;
-        q.prepare("INSERT INTO passwords(url, username, password) VALUES(:url, :username, :password);");
-        q.bindValue(":url", ne->le_URL->text());
-        q.bindValue(":username",ne->le_Username->text());
-        q.bindValue(":password",ne->le_Password->text());
-        if(!q.exec()){
-            qDebug() << "Could not insert entry: " << q.lastError().text();
-        }
-        ((QSqlQueryModel*)ui->tableView->model())->setQuery("SELECT * FROM passwords;");
+        writeEntryToDb(ne->le_URL->text(),ne->le_Username->text(),ne->le_Password->text());
     }
 }
 
 void MainWindow::tableViewClicked(const QModelIndex &idx){
-    qDebug() << "Row " << idx.row() << " clicked";
-    QString pwd = ((QSqlQueryModel*)ui->tableView->model())->record(idx.row()).field("password").value().toString();
-    QClipboard *clipboard = QApplication::clipboard();
-    clipboard->setText(pwd);
-    clipboard->setText(pwd,QClipboard::Selection);
-    qDebug() << "Password copied to clipboard.";
+    if(!editFlag){
+        qDebug() << "Row " << idx.row() << " clicked";
+        QString pwd = ((QSqlQueryModel*)ui->tableView->model())->record(idx.row()).field("password").value().toString();
+        QClipboard *clipboard = QApplication::clipboard();
+        clipboard->setText(pwd);
+        clipboard->setText(pwd,QClipboard::Selection);
+        qDebug() << "Password copied to clipboard.";
+    }
+    else{
+        Ui::NewEntry *ne = new Ui::NewEntry;
+        QDialog d;
+        ne->setupUi(&d);
+        QSqlRecord rec = ((QSqlQueryModel*)ui->tableView->model())->record(idx.row());
+        ne->le_URL->setText(rec.field("url").value().toString());
+        ne->le_Username->setText(rec.field("username").value().toString());
+        ne->le_Password->setText(rec.field("password").value().toString());
+        if(d.exec()){
+            writeEntryToDb(ne->le_URL->text(),ne->le_Username->text(),ne->le_Password->text());
+        }
+        editFlag = false;
+    }
 }
 
 void MainWindow::changePassword() {
@@ -120,6 +164,17 @@ void MainWindow::changePassword() {
     else{
         QMessageBox::warning(this,"Passwords did not match!","Passwords did not match! Password unchanged");
     }
+}
+
+bool MainWindow::eventFilter(QObject *, QEvent *e){
+    if(e->type() == QEvent::MouseButtonRelease){
+        QMouseEvent *me = static_cast<QMouseEvent*>(e);
+        if(me->modifiers() == Qt::ControlModifier){
+            qDebug() << "Ctrl+Left Click";
+            editFlag = true;
+        }
+    }
+    return false;
 }
 
 MainWindow::~MainWindow()

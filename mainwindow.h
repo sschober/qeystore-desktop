@@ -14,6 +14,7 @@ class MainWindow : public QMainWindow
     
 public:
     explicit MainWindow(QWidget *parent = 0);
+    bool eventFilter(QObject *, QEvent *);
     ~MainWindow();
 
 public slots:
@@ -24,9 +25,12 @@ public slots:
 
 private:
     QSqlDatabase init_db();
+    void refreshTableView();
+    void writeEntryToDb(QString url, QString username, QString password);
+
     Ui::MainWindow *ui;
     QSqlDatabase db;
-
+    bool editFlag;
 };
 
 #endif // MAINWINDOW_H
